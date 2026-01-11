@@ -1,0 +1,23 @@
+[package]
+name = "portfolio-generator"
+version = "1.0.0"
+description = "100개 프로그램 개발 포트폴리오 자동 생성기"
+authors = ["you"]
+license = ""
+repository = ""
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = ["macos-private-api"] }
+tauri-plugin-shell = "2.0"
+tauri-plugin-clipboard-manager = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dirs = "5.0"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
