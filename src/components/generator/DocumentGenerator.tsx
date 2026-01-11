@@ -182,7 +182,10 @@ export default function DocumentGenerator({ onClose }: Props) {
         }
       }
 
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const zipBlob = await zip.generateAsync({
+        type: 'blob',
+        mimeType: 'application/zip'
+      });
       downloadFile(`${project.name.replace(/\s+/g, '_')}_AI_Documents.zip`, zipBlob);
       setStep('export');
     } catch (error) {

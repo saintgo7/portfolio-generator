@@ -110,9 +110,20 @@ export async function exportAllToDocx(
 
 // 문서 다운로드 (브라우저용)
 export function downloadFile(filename: string, content: string | Blob) {
-  const blob = typeof content === 'string'
-    ? new Blob([content], { type: 'text/markdown;charset=utf-8' })
-    : content;
+  let blob: Blob;
+
+  if (typeof content === 'string') {
+    blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  } else if (content instanceof Blob) {
+    // ZIP 파일인 경우 MIME 타입 확인 및 재설정
+    if (filename.endsWith('.zip') && content.type !== 'application/zip') {
+      blob = new Blob([content], { type: 'application/zip' });
+    } else {
+      blob = content;
+    }
+  } else {
+    blob = new Blob([content], { type: 'application/octet-stream' });
+  }
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -164,7 +175,10 @@ export async function exportAllAsZip(
     }
   }
 
-  return await zip.generateAsync({ type: 'blob' });
+  return await zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/zip'
+  });
 }
 
 // 문서 타입 정보 가져오기
