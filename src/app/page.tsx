@@ -11,6 +11,7 @@ import { saveAs } from 'file-saver';
 import Sidebar from '@/components/common/Sidebar';
 import ProgressBar from '@/components/common/ProgressBar';
 import DocumentGenerator from '@/components/generator/DocumentGenerator';
+import AISettings from '@/components/settings/AISettings';
 
 export default function HomePage() {
   const { portfolios, nextNumber, currentPortfolio, loadData, savePortfolio, deletePortfolio, setCurrentPortfolio, getProgress } = usePortfolioStore();
@@ -21,6 +22,7 @@ export default function HomePage() {
   const [programName, setProgramName] = useState('');
   const [programDesc, setProgramDesc] = useState('');
   const [showDocGenerator, setShowDocGenerator] = useState(false);
+  const [showAISettings, setShowAISettings] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -169,6 +171,12 @@ export default function HomePage() {
                 </button>
               </>
             )}
+            <button
+              onClick={() => setShowAISettings(true)}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
+            >
+              ⚙️ AI 설정
+            </button>
             <button
               onClick={() => setShowDocGenerator(true)}
               className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm transition-colors"
@@ -392,6 +400,11 @@ export default function HomePage() {
       {/* Document Generator Modal */}
       {showDocGenerator && (
         <DocumentGenerator onClose={() => setShowDocGenerator(false)} />
+      )}
+
+      {/* AI Settings Modal */}
+      {showAISettings && (
+        <AISettings onClose={() => setShowAISettings(false)} />
       )}
     </div>
   );
