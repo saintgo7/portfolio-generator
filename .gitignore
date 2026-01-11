@@ -42,3 +42,6 @@ src-tauri/Cargo.lock
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Playwright MCP testing
+.playwright-mcp/
