@@ -10,6 +10,7 @@ import * as clipboard from '@tauri-apps/plugin-clipboard-manager';
 import { saveAs } from 'file-saver';
 import Sidebar from '@/components/common/Sidebar';
 import ProgressBar from '@/components/common/ProgressBar';
+import DocumentGenerator from '@/components/generator/DocumentGenerator';
 
 export default function HomePage() {
   const { portfolios, nextNumber, currentPortfolio, loadData, savePortfolio, deletePortfolio, setCurrentPortfolio, getProgress } = usePortfolioStore();
@@ -19,6 +20,7 @@ export default function HomePage() {
   const [selectedPlatform, setPlatform] = useState<Platform>('web');
   const [programName, setProgramName] = useState('');
   const [programDesc, setProgramDesc] = useState('');
+  const [showDocGenerator, setShowDocGenerator] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -167,6 +169,12 @@ export default function HomePage() {
                 </button>
               </>
             )}
+            <button
+              onClick={() => setShowDocGenerator(true)}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm transition-colors"
+            >
+              📄 12종 문서 생성
+            </button>
             <button
               onClick={handleNewPortfolio}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-colors"
@@ -380,6 +388,11 @@ export default function HomePage() {
           )}
         </div>
       </div>
+
+      {/* Document Generator Modal */}
+      {showDocGenerator && (
+        <DocumentGenerator onClose={() => setShowDocGenerator(false)} />
+      )}
     </div>
   );
 }
