@@ -1,6 +1,5 @@
 'use client';
 
-import { Portfolio } from '@/types/portfolio';
 import { usePortfolioStore } from '@/store/usePortfolioStore';
 
 interface SidebarProps {

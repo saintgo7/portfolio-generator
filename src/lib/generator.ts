@@ -166,6 +166,7 @@ export async function generateDocxContent(portfolio: Portfolio): Promise<Blob> {
     WidthType,
     AlignmentType,
     HeadingLevel,
+    Packer,
   } = await import('docx');
 
   const techStackRows = Object.entries(portfolio.techStack).map(([key, value]) =>
@@ -190,7 +191,7 @@ export async function generateDocxContent(portfolio: Portfolio): Promise<Blob> {
     })
   );
 
-  const screenParagraphs = portfolio.screens.map((screen, idx) =>
+  const screenParagraphs = portfolio.screens.map((screen) =>
     new Paragraph({
       numbering: { reference: 'screens', level: 0 },
       children: [new TextRun(screen)],
@@ -390,7 +391,7 @@ export async function generateDocxContent(portfolio: Portfolio): Promise<Blob> {
     ],
   });
 
-  return doc;
+  return await Packer.toBlob(doc);
 }
 
 export function generatePlainText(portfolio: Portfolio): string {

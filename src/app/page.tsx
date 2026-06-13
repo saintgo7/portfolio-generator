@@ -12,9 +12,14 @@ import Sidebar from '@/components/common/Sidebar';
 import ProgressBar from '@/components/common/ProgressBar';
 import DocumentGenerator from '@/components/generator/DocumentGenerator';
 import AISettings from '@/components/settings/AISettings';
+import AdminSettings from '@/components/settings/AdminSettings';
+import { useAuth } from '@/contexts/AuthContext';
+import LoginModal from '@/components/auth/LoginModal';
+import UserMenu from '@/components/auth/UserMenu';
 
 export default function HomePage() {
-  const { portfolios, nextNumber, currentPortfolio, loadData, savePortfolio, deletePortfolio, setCurrentPortfolio, getProgress } = usePortfolioStore();
+  const { nextNumber, currentPortfolio, loadData, savePortfolio, deletePortfolio, setCurrentPortfolio, getProgress } = usePortfolioStore();
+  const { user, profile, loading: authLoading } = useAuth();
 
   const [view, setView] = useState<'list' | 'form' | 'detail'>('list');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -23,6 +28,8 @@ export default function HomePage() {
   const [programDesc, setProgramDesc] = useState('');
   const [showDocGenerator, setShowDocGenerator] = useState(false);
   const [showAISettings, setShowAISettings] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showAdminSettings, setShowAdminSettings] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -111,8 +118,7 @@ export default function HomePage() {
     if (!currentPortfolio) return;
 
     try {
-      const doc = await generateDocxContent(currentPortfolio);
-      const blob = await doc.save();
+      const blob = await generateDocxContent(currentPortfolio);
       saveAs(blob, `${currentPortfolio.name.replace(/\s+/g, '_')}.docx`);
       alert('DOCX 파일이 저장되었습니다!');
     } catch (error) {
@@ -178,7 +184,13 @@ export default function HomePage() {
               ⚙️ AI 설정
             </button>
             <button
-              onClick={() => setShowDocGenerator(true)}
+              onClick={() => {
+                if (!user) {
+                  setShowLoginModal(true);
+                  return;
+                }
+                setShowDocGenerator(true);
+              }}
               className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm transition-colors"
             >
               📄 12종 문서 생성
@@ -189,6 +201,33 @@ export default function HomePage() {
             >
               새 포트폴리오
             </button>
+
+            {/* Auth Section */}
+            <div className="ml-2 pl-4 border-l border-gray-700 flex items-center gap-2">
+              {authLoading ? (
+                <div className="w-8 h-8 rounded-full bg-gray-700 animate-pulse" />
+              ) : user ? (
+                <>
+                  {profile?.role === 'admin' && (
+                    <button
+                      onClick={() => setShowAdminSettings(true)}
+                      className="px-3 py-2 bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 rounded-lg text-sm transition-colors"
+                      title="관리자 설정"
+                    >
+                      🔧
+                    </button>
+                  )}
+                  <UserMenu />
+                </>
+              ) : (
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm transition-colors"
+                >
+                  로그인
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -405,6 +444,16 @@ export default function HomePage() {
       {/* AI Settings Modal */}
       {showAISettings && (
         <AISettings onClose={() => setShowAISettings(false)} />
+      )}
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <LoginModal onClose={() => setShowLoginModal(false)} />
+      )}
+
+      {/* Admin Settings Modal */}
+      {showAdminSettings && (
+        <AdminSettings onClose={() => setShowAdminSettings(false)} />
       )}
     </div>
   );

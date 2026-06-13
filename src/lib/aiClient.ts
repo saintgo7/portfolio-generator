@@ -558,17 +558,15 @@ export async function testAPIKey(
   const useModel = model || providerInfo?.defaultModel || '';
 
   try {
-    let response: string;
-
     switch (provider) {
       case 'openai':
-        response = await callOpenAI(apiKey, useModel, testPrompt);
+        await callOpenAI(apiKey, useModel, testPrompt);
         break;
       case 'claude':
-        response = await callClaude(apiKey, useModel, testPrompt);
+        await callClaude(apiKey, useModel, testPrompt);
         break;
       case 'gemini':
-        response = await callGemini(apiKey, useModel, testPrompt);
+        await callGemini(apiKey, useModel, testPrompt);
         break;
       default:
         throw new Error('Unknown provider');

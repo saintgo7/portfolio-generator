@@ -1,5 +1,5 @@
 import { GeneratedDocument, DocumentType, Language, ProjectInput, DOCUMENT_TYPES } from '@/types/documents';
-import { generateDocument, generateAllDocuments } from './documentGenerator';
+import { generateAllDocuments } from './documentGenerator';
 
 // Markdown 파일로 내보내기
 export function exportToMarkdown(doc: GeneratedDocument): string {

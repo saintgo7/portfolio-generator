@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ProjectInput, DOCUMENT_TYPES, Language, DocumentType } from '@/types/documents';
+import { ProjectInput, DOCUMENT_TYPES, Language } from '@/types/documents';
 import { AIConfig, AI_PROVIDERS, SavedAISettings } from '@/types/ai';
 import { exportAllAsZip, downloadFile } from '@/lib/documentExporter';
 import { loadAISettings, generateAllDocumentsWithAI } from '@/lib/aiClient';
 import AISettings from '@/components/settings/AISettings';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Props {
   onClose: () => void;
@@ -33,12 +34,15 @@ const PLATFORMS = [
 ];
 
 export default function DocumentGenerator({ onClose }: Props) {
+  const { user, profile } = useAuth();
   const [step, setStep] = useState<'input' | 'generating' | 'export'>('input');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationMode, setGenerationMode] = useState<GenerationMode>('template');
   const [showAISettings, setShowAISettings] = useState(false);
   const [aiSettings, setAISettings] = useState<SavedAISettings | null>(null);
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, docType: '' });
+  const [useServerAPI, setUseServerAPI] = useState(true); // 서버 API 사용 여부
+  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'claude' | 'gemini'>('claude');
 
   const [project, setProject] = useState<ProjectInput>({
     name: '',
@@ -114,17 +118,57 @@ export default function DocumentGenerator({ onClose }: Props) {
     }
   };
 
+  // 서버 API로 문서 생성
+  const generateWithServerAPI = async (
+    documentType: string,
+    lang: Language
+  ): Promise<string> => {
+    const response = await fetch('/api/ai/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        documentType,
+        projectInfo: {
+          title: project.name + (lang === 'en' ? ' (English)' : ''),
+          description: project.description + (lang === 'en' ? ' - Please write in English.' : ''),
+          techStack: project.techPreferences?.split(',').map(s => s.trim()).filter(Boolean),
+          features: project.mainFeatures,
+          targetAudience: project.targetUsers,
+        },
+        provider: selectedProvider,
+        useAdminKey: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || '서버 오류');
+    }
+
+    const data = await response.json();
+    return data.content;
+  };
+
   const handleGenerateWithAI = async () => {
     if (!project.name || !project.description || !project.category || !project.platform) {
       alert('필수 항목을 모두 입력해주세요.');
       return;
     }
 
-    const config = getActiveAIConfig();
-    if (!config) {
-      alert('AI API 설정이 필요합니다.');
-      setShowAISettings(true);
+    // 서버 API 사용 시 로그인 필수
+    if (useServerAPI && !user) {
+      alert('AI 문서 생성을 위해 로그인이 필요합니다.');
       return;
+    }
+
+    // 로컬 모드일 때만 API 설정 확인
+    if (!useServerAPI) {
+      const config = getActiveAIConfig();
+      if (!config) {
+        alert('AI API 설정이 필요합니다.');
+        setShowAISettings(true);
+        return;
+      }
     }
 
     setIsGenerating(true);
@@ -132,53 +176,93 @@ export default function DocumentGenerator({ onClose }: Props) {
 
     try {
       const JSZip = (await import('jszip')).default;
-      const { Document, Paragraph, TextRun, HeadingLevel, Packer } = await import('docx');
       const zip = new JSZip();
       const projectFolder = project.name.replace(/\s+/g, '_');
+      const documentTypes = DOCUMENT_TYPES.map(d => d.type);
+      const totalDocs = documentTypes.length * ((selectedLangs.ko ? 1 : 0) + (selectedLangs.en ? 1 : 0));
+      let currentDoc = 0;
 
-      // 한글 문서 생성
-      if (selectedLangs.ko) {
-        const koFolder = zip.folder(`${projectFolder}/한글`);
-        const koDocs = await generateAllDocumentsWithAI(
-          config,
-          project,
-          'ko',
-          (current, total, docType) => {
-            setGenerationProgress({ current, total, docType });
+      // 서버 API 모드
+      if (useServerAPI) {
+        // 한글 문서 생성
+        if (selectedLangs.ko) {
+          const koFolder = zip.folder(`${projectFolder}/한글`);
+          for (const docType of documentTypes) {
+            currentDoc++;
+            setGenerationProgress({ current: currentDoc, total: totalDocs, docType });
+
+            try {
+              const content = await generateWithServerAPI(docType, 'ko');
+              koFolder?.file(`${docType.toUpperCase()}_KO.md`, content);
+              const docxBlob = await createDocx(content);
+              koFolder?.file(`${docType.toUpperCase()}_KO.docx`, docxBlob);
+            } catch (error) {
+              console.error(`Error generating ${docType}:`, error);
+              koFolder?.file(`${docType.toUpperCase()}_KO.md`, `# ${docType}\n\n생성 중 오류가 발생했습니다.`);
+            }
           }
-        );
-
-        for (const doc of koDocs) {
-          // MD 파일
-          koFolder?.file(`${doc.type.toUpperCase()}_KO.md`, doc.content);
-          // DOCX 파일
-          const docxBlob = await createDocx(doc.content);
-          koFolder?.file(`${doc.type.toUpperCase()}_KO.docx`, docxBlob);
         }
-      }
 
-      // 영문 문서 생성
-      if (selectedLangs.en) {
-        const enFolder = zip.folder(`${projectFolder}/English`);
-        const enDocs = await generateAllDocumentsWithAI(
-          config,
-          project,
-          'en',
-          (current, total, docType) => {
-            setGenerationProgress({
-              current: (selectedLangs.ko ? 12 : 0) + current,
-              total: (selectedLangs.ko ? 12 : 0) + total,
-              docType
-            });
+        // 영문 문서 생성
+        if (selectedLangs.en) {
+          const enFolder = zip.folder(`${projectFolder}/English`);
+          for (const docType of documentTypes) {
+            currentDoc++;
+            setGenerationProgress({ current: currentDoc, total: totalDocs, docType });
+
+            try {
+              const content = await generateWithServerAPI(docType, 'en');
+              enFolder?.file(`${docType.toUpperCase()}_EN.md`, content);
+              const docxBlob = await createDocx(content);
+              enFolder?.file(`${docType.toUpperCase()}_EN.docx`, docxBlob);
+            } catch (error) {
+              console.error(`Error generating ${docType}:`, error);
+              enFolder?.file(`${docType.toUpperCase()}_EN.md`, `# ${docType}\n\nError occurred during generation.`);
+            }
           }
-        );
+        }
+      } else {
+        // 로컬 API 모드 (기존 방식)
+        const config = getActiveAIConfig()!;
 
-        for (const doc of enDocs) {
-          // MD 파일
-          enFolder?.file(`${doc.type.toUpperCase()}_EN.md`, doc.content);
-          // DOCX 파일
-          const docxBlob = await createDocx(doc.content);
-          enFolder?.file(`${doc.type.toUpperCase()}_EN.docx`, docxBlob);
+        if (selectedLangs.ko) {
+          const koFolder = zip.folder(`${projectFolder}/한글`);
+          const koDocs = await generateAllDocumentsWithAI(
+            config,
+            project,
+            'ko',
+            (current, total, docType) => {
+              setGenerationProgress({ current, total, docType });
+            }
+          );
+
+          for (const doc of koDocs) {
+            koFolder?.file(`${doc.type.toUpperCase()}_KO.md`, doc.content);
+            const docxBlob = await createDocx(doc.content);
+            koFolder?.file(`${doc.type.toUpperCase()}_KO.docx`, docxBlob);
+          }
+        }
+
+        if (selectedLangs.en) {
+          const enFolder = zip.folder(`${projectFolder}/English`);
+          const enDocs = await generateAllDocumentsWithAI(
+            config,
+            project,
+            'en',
+            (current, total, docType) => {
+              setGenerationProgress({
+                current: (selectedLangs.ko ? 12 : 0) + current,
+                total: (selectedLangs.ko ? 12 : 0) + total,
+                docType
+              });
+            }
+          );
+
+          for (const doc of enDocs) {
+            enFolder?.file(`${doc.type.toUpperCase()}_EN.md`, doc.content);
+            const docxBlob = await createDocx(doc.content);
+            enFolder?.file(`${doc.type.toUpperCase()}_EN.docx`, docxBlob);
+          }
         }
       }
 
@@ -328,36 +412,119 @@ export default function DocumentGenerator({ onClose }: Props) {
 
                 {/* AI 설정 상태 */}
                 {generationMode === 'ai' && (
-                  <div className={`p-4 rounded-lg border ${
-                    hasValidAIConfig()
-                      ? 'bg-green-600/10 border-green-600/30'
-                      : 'bg-yellow-600/10 border-yellow-600/30'
-                  }`}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        {hasValidAIConfig() ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-green-400">{providerInfo?.icon}</span>
-                            <span className="text-green-400 font-medium">
-                              {providerInfo?.name} 연결됨
-                            </span>
-                            <span className="text-zinc-500 text-sm">
-                              ({activeProvider?.model})
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-yellow-400">
-                            ⚠️ AI API 설정이 필요합니다
-                          </span>
-                        )}
-                      </div>
+                  <div className="space-y-3">
+                    {/* 서버 API vs 로컬 API 선택 */}
+                    <div className="flex gap-3">
                       <button
-                        onClick={() => setShowAISettings(true)}
-                        className="px-3 py-1 bg-zinc-800 text-zinc-300 text-sm rounded hover:bg-zinc-700"
+                        onClick={() => setUseServerAPI(true)}
+                        className={`flex-1 p-3 rounded-lg border-2 text-left transition-all ${
+                          useServerAPI
+                            ? 'border-green-500 bg-green-600/20'
+                            : 'border-zinc-700 hover:border-zinc-600'
+                        }`}
                       >
-                        ⚙️ API 설정
+                        <div className="font-medium text-white text-sm">🌐 서버 API (권장)</div>
+                        <div className="text-xs text-zinc-400 mt-1">
+                          로그인 후 무료 사용
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => setUseServerAPI(false)}
+                        className={`flex-1 p-3 rounded-lg border-2 text-left transition-all ${
+                          !useServerAPI
+                            ? 'border-blue-500 bg-blue-600/20'
+                            : 'border-zinc-700 hover:border-zinc-600'
+                        }`}
+                      >
+                        <div className="font-medium text-white text-sm">🔑 개인 API 키</div>
+                        <div className="text-xs text-zinc-400 mt-1">
+                          본인 API 키 사용
+                        </div>
                       </button>
                     </div>
+
+                    {/* 서버 API 모드 */}
+                    {useServerAPI ? (
+                      <div className={`p-4 rounded-lg border ${
+                        user
+                          ? 'bg-green-600/10 border-green-600/30'
+                          : 'bg-yellow-600/10 border-yellow-600/30'
+                      }`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            {user ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-green-400">✓</span>
+                                <span className="text-green-400 font-medium">
+                                  로그인됨: {profile?.full_name || user.email}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-yellow-400">
+                                ⚠️ AI 문서 생성을 위해 로그인이 필요합니다
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* AI 제공자 선택 */}
+                        <div>
+                          <label className="block text-xs text-zinc-400 mb-2">AI 제공자 선택</label>
+                          <div className="flex gap-2">
+                            {[
+                              { id: 'openai', name: 'GPT-4o', icon: '🤖' },
+                              { id: 'claude', name: 'Claude', icon: '🧠' },
+                              { id: 'gemini', name: 'Gemini', icon: '💎' },
+                            ].map(p => (
+                              <button
+                                key={p.id}
+                                onClick={() => setSelectedProvider(p.id as any)}
+                                className={`flex-1 p-2 rounded-lg text-sm transition-all ${
+                                  selectedProvider === p.id
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                                }`}
+                              >
+                                {p.icon} {p.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* 로컬 API 모드 */
+                      <div className={`p-4 rounded-lg border ${
+                        hasValidAIConfig()
+                          ? 'bg-green-600/10 border-green-600/30'
+                          : 'bg-yellow-600/10 border-yellow-600/30'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            {hasValidAIConfig() ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-green-400">{providerInfo?.icon}</span>
+                                <span className="text-green-400 font-medium">
+                                  {providerInfo?.name} 연결됨
+                                </span>
+                                <span className="text-zinc-500 text-sm">
+                                  ({activeProvider?.model})
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-yellow-400">
+                                ⚠️ AI API 설정이 필요합니다
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => setShowAISettings(true)}
+                            className="px-3 py-1 bg-zinc-800 text-zinc-300 text-sm rounded hover:bg-zinc-700"
+                          >
+                            ⚙️ API 설정
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
