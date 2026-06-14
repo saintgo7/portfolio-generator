@@ -161,7 +161,7 @@ export async function DELETE(request: Request) {
 function getDefaultModel(provider: string): string {
   const models: Record<string, string> = {
     openai: 'gpt-4o-mini',
-    claude: 'claude-3-5-sonnet-20241022',
+    claude: 'claude-sonnet-4-20250514',
     gemini: 'gemini-1.5-flash',
   };
   return models[provider] || models.openai;

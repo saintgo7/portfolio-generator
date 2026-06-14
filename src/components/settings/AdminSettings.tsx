@@ -19,7 +19,7 @@ interface Props {
 
 const PROVIDER_INFO: Record<Provider, { name: string; icon: string; defaultModel: string }> = {
   openai: { name: 'OpenAI', icon: '🤖', defaultModel: 'gpt-4o-mini' },
-  claude: { name: 'Claude', icon: '🧠', defaultModel: 'claude-3-5-sonnet-20241022' },
+  claude: { name: 'Claude', icon: '🧠', defaultModel: 'claude-sonnet-4-20250514' },
   gemini: { name: 'Gemini', icon: '💎', defaultModel: 'gemini-1.5-flash' },
 };
 
