@@ -14,7 +14,12 @@ export async function GET(request: Request) {
 
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/';
+  // 오픈 리다이렉트 방지: 내부 경로(/로 시작, //·/\ 제외)만 허용
+  const nextParam = searchParams.get('next') ?? '/';
+  const next =
+    nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.startsWith('/\\')
+      ? nextParam
+      : '/';
 
   // Supabase에서 오는 에러 파라미터 확인
   const error = searchParams.get('error');
