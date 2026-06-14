@@ -53,8 +53,3 @@ export async function GET(request: Request) {
   // 코드가 없는 경우
   return NextResponse.redirect(`${origin}/auth/error?error=no_code`);
 }
-
-// Static export를 위한 generateStaticParams (빈 배열)
-export function generateStaticParams() {
-  return [];
-}
