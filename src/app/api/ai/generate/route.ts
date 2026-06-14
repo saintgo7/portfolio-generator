@@ -8,6 +8,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export const runtime = 'nodejs';
 export const maxDuration = 60; // 60초 타임아웃
 
+const MAX_PROMPT_CHARS = 20000; // 프롬프트 입력 길이 상한 (비용 남용 방지)
+
 interface GenerateRequest {
   documentType: string;
   projectInfo: {
@@ -244,6 +246,21 @@ export async function POST(request: Request) {
       );
     }
 
+    // 프롬프트 크기 제한 (비용 남용 방지)
+    const promptSize =
+      (projectInfo.title?.length || 0) +
+      (projectInfo.description?.length || 0) +
+      (projectInfo.techStack?.join(',').length || 0) +
+      (projectInfo.features?.join(',').length || 0) +
+      (projectInfo.targetAudience?.length || 0);
+
+    if (promptSize > MAX_PROMPT_CHARS) {
+      return NextResponse.json(
+        { error: '입력 내용이 너무 깁니다. 길이를 줄여주세요.' },
+        { status: 413 }
+      );
+    }
+
     let apiKey: string | null = null;
 
     if (useAdminKey) {
@@ -251,15 +268,35 @@ export async function POST(request: Request) {
       const serviceClient = createServiceRoleClient();
       const { data: adminKey, error: keyError } = await (serviceClient
         .from('admin_api_keys') as any)
-        .select('encrypted_key')
+        .select('encrypted_key, daily_limit')
         .eq('provider', provider)
         .eq('is_active', true)
-        .single() as { data: { encrypted_key: string } | null; error: unknown };
+        .single() as { data: { encrypted_key: string; daily_limit: number } | null; error: unknown };
 
       if (keyError || !adminKey) {
         return NextResponse.json(
           { error: `${provider} 관리자 API 키가 설정되지 않았습니다.` },
           { status: 404 }
+        );
+      }
+
+      // 사용자별 일일 한도 확인 (공용 관리자 키 남용 방지)
+      const dailyLimit = adminKey.daily_limit ?? 100;
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const serviceClientForCount = createServiceRoleClient();
+      const { count: usageCount } = await (serviceClientForCount
+        .from('usage_logs') as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('provider', provider)
+        .gte('created_at', startOfDay.toISOString()) as { count: number | null };
+
+      if ((usageCount ?? 0) >= dailyLimit) {
+        return NextResponse.json(
+          { error: '일일 사용 한도를 초과했습니다. 내일 다시 시도해주세요.' },
+          { status: 429 }
         );
       }
 
